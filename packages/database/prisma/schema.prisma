@@ -1,0 +1,563 @@
+// Prisma schema for AI Content Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// User & Authentication
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String?
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(USER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  organizations OrganizationMember[]
+  projects      Project[]
+  brandProfiles BrandProfile[]
+  contents      Content[]
+  apiKeys       ApiKey[]
+  subscriptions Subscription[]
+  usage         UsageRecord[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// Organization & Teams
+// ============================================
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  image       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members       OrganizationMember[]
+  projects      Project[]
+  brandProfiles BrandProfile[]
+  subscription  Subscription?
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgRole @default(MEMBER)
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@map("organization_members")
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// ============================================
+// Projects & Brand
+// ============================================
+
+model Project {
+  id             String  @id @default(cuid())
+  name           String
+  description    String?
+  userId         String
+  organizationId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contents     Content[]
+
+  @@map("projects")
+}
+
+model BrandProfile {
+  id             String @id @default(cuid())
+  name           String
+  userId         String
+  organizationId String?
+
+  // Brand voice attributes (stored as JSON)
+  writingStyle      Json
+  toneAttributes    Json
+  vocabularyPatterns Json
+  ctaStyle          String?
+  hashtagStyle      String?
+  emojiUsage        Json?
+
+  // Visual brand
+  colors      String[] // hex colors
+  fonts       String[]
+  logoUrl     String?
+
+  // Sample content for learning
+  sampleContents String[]
+  guidelines     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  contents     Content[]
+
+  @@map("brand_profiles")
+}
+
+// ============================================
+// Content
+// ============================================
+
+model Content {
+  id             String      @id @default(cuid())
+  type           ContentType
+  platform       Platform?
+
+  // Text content
+  title          String?
+  body           String?
+  summary        String?
+
+  // Metadata
+  metadata       Json?
+  tags           String[]
+  keywords       String[]
+
+  // Relations
+  projectId      String?
+  brandProfileId String?
+  userId         String
+
+  // Status
+  status         ContentStatus @default(DRAFT)
+  publishedAt    DateTime?
+  scheduledFor   DateTime?
+
+  // Analytics
+  views          Int           @default(0)
+  engagement     Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  brandProfile BrandProfile? @relation(fields: [brandProfileId], references: [id], onDelete: SetNull)
+  assets       Asset[]
+  versions     ContentVersion[]
+  analytics    ContentAnalytics[]
+
+  @@index([userId, status])
+  @@index([type, status])
+  @@map("contents")
+}
+
+enum ContentType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  SOCIAL_POST
+  BLOG_POST
+  EMAIL
+  AD_COPY
+  PRODUCT_DESCRIPTION
+  NEWSLETTER
+  TRANSLATION
+}
+
+enum Platform {
+  INSTAGRAM
+  TWITTER
+  LINKEDIN
+  FACEBOOK
+  TIKTOK
+  YOUTUBE
+  BLOG
+  EMAIL
+  WEBSITE
+}
+
+enum ContentStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+model ContentVersion {
+  id        String   @id @default(cuid())
+  contentId String
+  version   Int
+  data      Json
+  createdAt DateTime @default(now())
+
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([contentId, version])
+  @@map("content_versions")
+}
+
+// ============================================
+// Assets (Images, Videos, Audio)
+// ============================================
+
+model Asset {
+  id        String    @id @default(cuid())
+  type      AssetType
+  url       String
+  key       String // S3 key
+  filename  String
+  mimeType  String
+  size      Int
+  width     Int?
+  height    Int?
+  duration  Int? // for audio/video in seconds
+
+  // AI generated metadata
+  description String?
+  tags        String[]
+  altText     String?
+
+  contentId String?
+  userId    String
+
+  createdAt DateTime @default(now())
+
+  content Content? @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([type])
+  @@map("assets")
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
+// ============================================
+// Content Analytics
+// ============================================
+
+model ContentAnalytics {
+  id        String   @id @default(cuid())
+  contentId String
+  date      DateTime @default(now())
+
+  views        Int @default(0)
+  clicks       Int @default(0)
+  likes        Int @default(0)
+  shares       Int @default(0)
+  comments     Int @default(0)
+  saves        Int @default(0)
+
+  engagementRate Float?
+  clickThrough   Float?
+
+  // Platform specific
+  platformData Json?
+
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([contentId, date])
+  @@map("content_analytics")
+}
+
+// ============================================
+// Curation & Translation
+// ============================================
+
+model CuratedSource {
+  id          String   @id @default(cuid())
+  type        String // RSS, API, Website
+  url         String
+  name        String
+  topics      String[]
+  active      Boolean  @default(true)
+  lastFetched DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items CuratedItem[]
+
+  @@map("curated_sources")
+}
+
+model CuratedItem {
+  id       String @id @default(cuid())
+  sourceId String
+
+  title       String
+  url         String   @unique
+  summary     String?
+  content     String?
+  author      String?
+  publishedAt DateTime?
+
+  // AI analysis
+  oneLineSummary String?
+  keyPoints      String[]
+  tags           String[]
+  sentiment      String?
+  relevanceScore Float?
+
+  fetchedAt DateTime @default(now())
+
+  source CuratedSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId])
+  @@map("curated_items")
+}
+
+model Translation {
+  id             String @id @default(cuid())
+  sourceText     String
+  sourceLang     String
+  targetLang     String
+  translatedText String
+
+  contentType String?
+  context     Json?
+
+  // Quality metrics
+  confidence Float?
+  humanEdited Boolean @default(false)
+
+  userId String
+
+  createdAt DateTime @default(now())
+
+  @@index([sourceLang, targetLang])
+  @@map("translations")
+}
+
+model Glossary {
+  id   String @id @default(cuid())
+  name String
+
+  sourceLang String
+  targetLang String
+
+  terms Json // { "source_term": "target_term" }
+
+  userId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("glossaries")
+}
+
+// ============================================
+// Subscription & Billing
+// ============================================
+
+model Subscription {
+  id             String           @id @default(cuid())
+  userId         String?
+  organizationId String?          @unique
+
+  plan           SubscriptionPlan
+  status         SubscriptionStatus
+
+  // Stripe
+  stripeCustomerId       String? @unique
+  stripeSubscriptionId   String? @unique
+  stripePriceId          String?
+  stripeCurrentPeriodEnd DateTime?
+
+  // Usage limits
+  contentLimit      Int?
+  teamMemberLimit   Int?
+  storageLimit      Int? // in GB
+  apiCallLimit      Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionPlan {
+  FREE
+  STARTER
+  PRO
+  BUSINESS
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  PAST_DUE
+  TRIALING
+  UNPAID
+}
+
+// ============================================
+// Usage Tracking
+// ============================================
+
+model UsageRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime @default(now())
+
+  service   String // contents-studio, video-generator, etc.
+  action    String // generate, translate, etc.
+
+  // Tokens/credits used
+  tokensUsed    Int?
+  creditsUsed   Int?
+
+  // Cost tracking
+  costUsd Float?
+
+  metadata Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@index([service, action])
+  @@map("usage_records")
+}
+
+// ============================================
+// API Keys
+// ============================================
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  key         String   @unique
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+// ============================================
+// Jobs & Queue
+// ============================================
+
+model Job {
+  id     String    @id @default(cuid())
+  type   String
+  status JobStatus @default(PENDING)
+
+  // Job data
+  input  Json
+  output Json?
+  error  String?
+
+  attempts Int @default(0)
+  maxAttempts Int @default(3)
+
+  // Timing
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@index([status, type])
+  @@map("jobs")
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELED
+}

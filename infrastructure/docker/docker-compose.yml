@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ai_content_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ../../services/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Contents Studio (Next.js)
+  contents-studio:
+    build:
+      context: ../../apps/contents-studio
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api-gateway:8000
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  # Video Generator (Next.js)
+  video-generator:
+    build:
+      context: ../../apps/video-generator
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api-gateway:8000
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  # Copywriter (Next.js)
+  copywriter:
+    build:
+      context: ../../apps/copywriter
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api-gateway:8000
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  # Content Curator (Next.js)
+  content-curator:
+    build:
+      context: ../../apps/content-curator
+      dockerfile: Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api-gateway:8000
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  # Localization Hub (Next.js)
+  localization-hub:
+    build:
+      context: ../../apps/localization-hub
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api-gateway:8000
+      - DATABASE_URL=${DATABASE_URL}
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
