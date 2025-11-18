@@ -35,7 +35,8 @@
 
 - **@repo/ai-client** - Anthropic Claude API 클라이언트
 - **@repo/database** - PostgreSQL + Prisma
-- **@repo/auth** - 인증 시스템
+- **@repo/auth** - NextAuth.js 인증 시스템 (이메일/비밀번호, Google OAuth)
+- **@repo/payments** - Stripe 결제 및 구독 관리
 - **@repo/ui** - 공유 UI 컴포넌트 (React)
 - **@repo/shared** - 공통 유틸리티
 

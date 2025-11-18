@@ -1,16 +1,33 @@
 'use client';
 
 import { useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { Button, Card } from '@repo/ui';
 import Link from 'next/link';
 
 export default function DashboardPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [stats] = useState({
     contentsGenerated: 45,
     totalViews: 12500,
     engagement: 8.5,
     monthlyLimit: 100,
   });
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    router.push('/auth/signin');
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -19,13 +36,22 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900">AI Contents Studio</h1>
-            <div className="flex gap-4">
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-600">
+                Welcome, {session.user?.name || session.user?.email}
+              </span>
               <Link href="/brand">
                 <Button variant="outline">Brand Settings</Button>
               </Link>
               <Link href="/generate">
                 <Button>+ New Content</Button>
               </Link>
+              <Button
+                variant="ghost"
+                onClick={() => signOut({ callbackUrl: '/' })}
+              >
+                Sign Out
+              </Button>
             </div>
           </div>
         </div>
